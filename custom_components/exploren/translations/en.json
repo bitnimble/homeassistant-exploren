@@ -15,16 +15,26 @@
         "data": {
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Exploren",
+        "description": "Re-enter your Exploren credentials. The password is used only to obtain a new token and is not stored.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       }
     },
     "error": {
       "invalid_auth": "Invalid email or password.",
       "cannot_connect": "Failed to connect to Exploren.",
+      "wrong_account": "That email is for a different account than the one being reconfigured.",
       "unknown": "Unexpected error."
     },
     "abort": {
       "already_configured": "This account is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Credentials updated successfully."
     }
   },
   "entity": {

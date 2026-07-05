@@ -18,6 +18,12 @@ PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Exploren from a config entry."""
+    # Migrate away any password persisted by an earlier version: we no longer
+    # store it, and rely on reauth/reconfigure to re-enter credentials.
+    if CONF_PASSWORD in entry.data:
+        data = {k: v for k, v in entry.data.items() if k != CONF_PASSWORD}
+        hass.config_entries.async_update_entry(entry, data=data)
+
     session = async_get_clientsession(hass)
 
     async def _save_token(token: dict[str, Any]) -> None:
@@ -25,10 +31,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry, data={**entry.data, CONF_TOKEN: token}
         )
 
+    # No password is passed: on refresh-token failure the client raises an auth
+    # error, which the coordinator turns into a reauth prompt.
     api = ExplorenApi(
         session,
         email=entry.data.get(CONF_EMAIL),
-        password=entry.data.get(CONF_PASSWORD),
         token=entry.data.get(CONF_TOKEN),
         on_token_update=_save_token,
     )

@@ -19,8 +19,14 @@ where the hardware reports it.
 - One Home Assistant **device per connector (EVSE)**.
 
 Tokens are handled automatically: the access token is refreshed proactively
-before expiry and on a `401`, with a full re-login fallback (Laravel Passport
-rotates refresh tokens, so the new pair is persisted each time).
+before expiry and on a `401` (Laravel Passport rotates refresh tokens, so the
+new pair is persisted each time).
+
+**Your password is not stored**; only the email and the OAuth token bundle are
+kept in the Home Assistant config entry. When the refresh token eventually
+expires, Home Assistant raises a **reauthentication** prompt to re-enter your
+password. You can also update your credentials any time via the integration's
+**⋮ → Reconfigure** menu, no need to remove and re-add it.
 
 ## Installation (HACS)
 
