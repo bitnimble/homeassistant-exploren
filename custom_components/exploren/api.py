@@ -127,7 +127,13 @@ class ExplorenApi:
     # -- requests -----------------------------------------------------------
 
     async def _request(
-        self, method: str, path: str, *, json_body: Any | None = None, retry: bool = True
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any | None = None,
+        retry: bool = True,
+        allow_not_found: bool = False,
     ) -> Any:
         token = await self._valid_token()
         headers = {**self._base_headers(), "Authorization": f"Bearer {token}"}
@@ -138,13 +144,20 @@ class ExplorenApi:
                 if resp.status == 401 and retry:
                     await self._refresh()
                     return await self._request(
-                        method, path, json_body=json_body, retry=False
+                        method,
+                        path,
+                        json_body=json_body,
+                        retry=False,
+                        allow_not_found=allow_not_found,
                     )
                 data = await self._read(resp)
                 status = resp.status
         except aiohttp.ClientError as err:
             raise ExplorenError(f"Connection error: {err}") from err
 
+        # Some endpoints (e.g. session/active) 404 to mean "nothing here".
+        if status == 404 and allow_not_found:
+            return None
         if status == 401:
             raise ExplorenAuthError(f"{method} {path} -> 401: {data}")
         if status >= 400:
@@ -167,7 +180,10 @@ class ExplorenApi:
         return await self._request("GET", "/app/personal/charge-points")
 
     async def get_active_session(self) -> Any:
-        return await self._request("GET", "/app/session/active")
+        # Returns 404 (not 200/null) when there is no active session.
+        return await self._request(
+            "GET", "/app/session/active", allow_not_found=True
+        )
 
     async def start_session(self, evse_id: int | str) -> Any:
         return await self._request(
@@ -177,4 +193,7 @@ class ExplorenApi:
         )
 
     async def stop_session(self, session_id: int | str) -> Any:
-        return await self._request("POST", f"/app/session/{session_id}/stop")
+        # 404 means the session already ended: a no-op for a stop action.
+        return await self._request(
+            "POST", f"/app/session/{session_id}/stop", allow_not_found=True
+        )
