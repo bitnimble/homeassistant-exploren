@@ -185,8 +185,10 @@ class ExplorenWebsocket:
             return
         event = frame[0]
         if event == "subscription_error":
+            # frame = ["subscription_error", channel, code]; keep the code, drop
+            # the channel (it embeds the user id) so it can't leak via status.
             self.subscribed = False
-            self.last_error = f"subscription_error {frame[1:]}"
+            self.last_error = f"subscription_error (code {frame[-1]})"
             _LOGGER.warning("websocket %s", self.last_error)
             return
         self.event_count += 1

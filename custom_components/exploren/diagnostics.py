@@ -20,6 +20,12 @@ REDACT = {
     "paymentMethodId",
     "identifier",
     "name",
+    "ownerName",
+    "postcode",
+    "location",
+    "latitude",
+    "longitude",
+    "channel",
 }
 
 
@@ -32,5 +38,7 @@ async def async_get_config_entry_diagnostics(
         "entry_data": async_redact_data(dict(entry.data), REDACT),
         "raw": async_redact_data(coordinator.raw, REDACT),
         "normalized": async_redact_data(coordinator.data or {}, REDACT),
-        "websocket": websocket.status if websocket is not None else None,
+        "websocket": async_redact_data(websocket.status, REDACT)
+        if websocket is not None
+        else None,
     }
