@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import ExplorenApi
 from .const import CONF_TOKEN, DOMAIN
 from .coordinator import ExplorenCoordinator
+from .websocket import ExplorenWebsocket
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
@@ -45,11 +46,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Live updates over the socket.io websocket; refresh on any broadcast event.
+    # Additive on top of polling; failures fall back to polling silently.
+    coordinator.websocket = ExplorenWebsocket(
+        hass, api, coordinator.async_request_refresh
+    )
+    await coordinator.websocket.async_start()
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator: ExplorenCoordinator = hass.data[DOMAIN][entry.entry_id]
+    if coordinator.websocket is not None:
+        await coordinator.websocket.async_stop()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id)

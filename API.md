@@ -53,9 +53,16 @@ Refresh: same endpoint, `grant_type=refresh_token` + `refresh_token` + client id
 
 ## 2. Your own chargers, `GET /app/personal/charge-points`
 
-Returns charge points you own, each with `evses[]` (`id`, `identifier`,
-`status`, `isAvailable`, `connectors[]`, `maxPower`). The `evses[].id` is the
-`evseId` used to start a session.
+Returns `{ "data": [ chargePoint ] }`. Each charge point has `evses[]`, and
+**each EVSE embeds its active `session`** (if any) plus `id`, `identifier`,
+`status`, `connectors[]`, `maxPower`, `tariff`. This single call is therefore
+enough to render live session state, no separate session request is needed.
+
+Two distinct ids matter:
+- `evse.id`, internal EVSE id (e.g. `"3760"`); use it as the stable device key.
+- `evse.identifier`, the public EVSE id (e.g. `"3692"`); this is what the API
+  means by `evseId` (it equals `session.evseId`), and it's what you pass to
+  start a session.
 
 Related: `/app/home/charge-points`, `/app/personal/charge-points/evses/`,
 `/app/personal/charge-point/{id}`.
@@ -63,9 +70,11 @@ Related: `/app/home/charge-points`, `/app/personal/charge-points/evses/`,
 ## 3. Start charge ("Tap to confirm charge"), `POST /app/session/start`
 
 ```json
-{ "evseId": <id>, "source": "App" }
+{ "evseId": <evse.identifier>, "source": "App" }
 ```
-Optional: `paymentMethodId`, `tariffId`, `autocharge`, `reservationId`, `amount`.
+Note `evseId` is the EVSE **identifier** (`3692`), not the internal `id`
+(`3760`). Optional: `paymentMethodId`, `tariffId`, `autocharge`,
+`reservationId`, `amount`.
 
 ## 4. Session state
 
@@ -75,29 +84,54 @@ Optional: `paymentMethodId`, `tariffId`, `autocharge`, `reservationId`, `amount`
 
 ## 5. Vehicle state-of-charge (SoC)
 
-Field: `carBatteryPercent`, returned at the top level of the
-`GET /app/session/active` response (a sibling of `session`, not inside it).
+Field: `carBatteryPercent`. **It is a live, websocket-delivered value, not a
+stored REST attribute**; populated from the charger's OCPP SoC meter reports
+and pushed via the `EVSEChargingPercentageChanged` event (rendered by
+`renderEvseBatteryPercent`). Over REST the field is empty/absent unless a
+session is **actively charging** AND the charger + vehicle actually report SoC
+(ISO 15118 / OCPP). Many AC home chargers never send it. Confirmed empty on a
+live charging session (`/app/session/active` returned `carBatteryPercent: ""`,
+and it is absent from the embedded charge-points session).
 
-**It is a live value, not a stored attribute.** It is populated from the
-charger's OCPP SoC meter reports and pushed via the websocket event
-`EVSEChargingPercentageChanged` (handler `onEVSEChargingPercentageChanged`,
-rendered by `renderEvseBatteryPercent`). The REST field mirrors the last pushed
-value. Consequently it is an **empty string** when:
-  - the session is not actively charging (e.g. `chargingState: suspendedEVSE`,
-    smart-charging holding current at 0), or
-  - the charger/vehicle don't report SoC at all (ISO 15118 / OCPP SoC; many AC
-    home chargers never send it).
+The integration reads `carBatteryPercent` from the embedded session if present,
+so it works for SoC-capable hardware, but expects `unknown` otherwise. Real
+SoC needs the websocket (see below).
 
-So SoC is only meaningful while actively charging, and only on SoC-capable
-hardware. Confirmed empty on a live `suspendedEVSE` session (evseStatus
-`charging` but power ~0 due to a smart-charging schedule).
+## 6. Real-time websocket (implemented; verified live)
 
-Real-time source: **Laravel Echo (Pusher protocol)** at `APP_BROADCAST_ENDPOINT`
-(`https://echo.au.charge.ampeco.tech`), events `EVSEChargingPercentageChanged`
-and `PersonalEVSEStatusChange` on a private channel (prefix `exploren`, keyed by
-user/EVSE). Subscription authed against `POST /broadcasting/auth` with the
-bearer token. The websocket delivers the same value push-style; it does not
-exist for a vehicle that isn't in an active, SoC-reporting session.
+Live updates come over **`laravel-echo-server` (socket.io v2 / Engine.IO v3)**,
+NOT Pusher (the echo host is `x-powered-by: Express`; `GET /` returns `OK`;
+`GET /socket.io/?EIO=3&transport=polling` returns a socket.io handshake).
+`laravel-echo` uses its `SocketIoConnector`.
+
+Flow (all verified against the live server):
+1. Connect `wss://echo.au.charge.ampeco.tech/socket.io/?EIO=3&transport=websocket`.
+   Server sends `0{...}` (open) then `40` (auto-connects the default namespace).
+2. Subscribe:
+   `42["subscribe",{"channel":"private-{channelPrefix}.user.{userId}","auth":{"headers":{"Authorization":"Bearer <token>","X-Endpoint":"<api-base-url>"}}}]`
+   - `channelPrefix` from `GET /app/settings/global` -> `broadcast.channelPrefix`;
+     `broadcast.url` is the echo host; user id from `GET /app/profile` -> `id`.
+   - **`X-Endpoint` is the key** (= `BASE_URL`,
+     `https://exploren.au.charge.ampeco.tech/api/v1`). The echo host is shared
+     across AU tenants; `X-Endpoint` tells it which tenant backend to run its
+     server-side `/broadcasting/auth` against. This value comes from the
+     decompiled Echo config (`auth.headers = {Authorization, X-Endpoint}`), not
+     guessable from strings.
+3. Keepalive: Engine.IO ping/pong (`2`/`3`); the integration pings when idle and
+   pongs server pings.
+4. Events arrive as `42[eventName, channel, data]` (namespace `App.Events`):
+   `SessionChanged`, `EVSEChargingPercentageChanged`, `PersonalEVSEStatusChange`,
+   `PersonalChargePointStatusChange`, `UnlockConnectorStatusChanged`,
+   `ReservationChanged`. The integration refreshes the coordinator on any event.
+
+Auth verification: subscribing to your own channel returns no error; another
+user's channel returns `subscription_error … 403` (authenticated but forbidden),
+vs `401` when `X-Endpoint` is missing/wrong; the discriminator that confirmed
+the mechanism.
+
+Additive: on any failure the integration falls back to REST polling. Live status
+(`subscribed` / `channel` / `events_received` / `last_error`) is in the entry's
+downloadable diagnostics.
 
 ## Notes
 

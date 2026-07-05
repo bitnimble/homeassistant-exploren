@@ -50,9 +50,15 @@ integration bug.
 ## How it works
 
 Auth is AMPECO-native Laravel Passport (`/app/oauth/token` password grant);
-data comes from `/app/personal/charge-points` and `/app/session/active`, and
-charging is driven via `/app/session/start` and `/app/session/{id}/stop`. See
-[`API.md`](API.md) for the full reverse-engineered API reference.
+all state comes from a single `/app/personal/charge-points` call (each connector
+embeds its active `session`), and charging is driven via `/app/session/start`
+and `/app/session/{id}/stop`. See [`API.md`](API.md) for the full
+reverse-engineered API reference.
+
+[`scripts/exploren.py`](scripts/exploren.py) is a standalone CLI (no HA needed)
+for querying the API by hand, `login`, `chargers`, `active`, `soc`, `start`,
+`stop`, `get <path>`. Useful for debugging; run `python3 scripts/exploren.py`
+for usage.
 
 ## Configuration
 
@@ -61,4 +67,9 @@ charging is driven via `/app/session/start` and `/app/session/{id}/stop`. See
 | Email    | Your Exploren account email    |
 | Password | Your Exploren account password |
 
-Polling interval is 30s.
+Live updates come over the same **websocket** the app uses (`laravel-echo-server`
+/ socket.io): the integration subscribes to your private channel and refreshes
+instantly on session/charger events. REST polling is the fallback (60s active /
+5min idle, one request per poll); if the websocket can't connect it degrades to
+polling silently. Live status is in the entry's **Download diagnostics**
+(`websocket` block). See [`API.md`](API.md) §6.

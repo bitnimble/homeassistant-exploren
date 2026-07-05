@@ -1,12 +1,14 @@
 {
   "domain": "exploren",
   "name": "Exploren EV Charging",
-  "codeowners": ["@bitnimble"],
+  "codeowners": [
+    "@bitnimble"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/bitnimble/homeassistant-exploren",
   "integration_type": "hub",
-  "iot_class": "cloud_polling",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/bitnimble/homeassistant-exploren/issues",
   "requirements": [],
-  "version": "1.1.0"
+  "version": "1.4.0"
 }

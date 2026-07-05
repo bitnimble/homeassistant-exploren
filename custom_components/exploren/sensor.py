@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import ExplorenCoordinator
+from .coordinator import ExplorenCoordinator, find_key
 from .entity import ExplorenEvseEntity
 
 
@@ -137,7 +137,12 @@ class ExplorenSensor(ExplorenEvseEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        return self.entity_description.value_fn(self.evse, self.session, self.coordinator.data.get("soc"))
+        # SoC (carBatteryPercent), if the charger/vehicle report it, sits on this
+        # EVSE or its session. Exclude the merged `chargePoint` (which holds every
+        # sibling connector) so another connector's SoC can't leak onto this one.
+        own = {k: v for k, v in self.evse.items() if k != "chargePoint"}
+        soc = find_key(own, "carBatteryPercent")
+        return self.entity_description.value_fn(self.evse, self.session, soc)
 
     @property
     def native_unit_of_measurement(self) -> str | None:

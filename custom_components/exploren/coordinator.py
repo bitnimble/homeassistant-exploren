@@ -12,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import ExplorenApi, ExplorenAuthError, ExplorenError
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import ACTIVE_SCAN_INTERVAL, IDLE_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def find_key(obj: Any, key: str) -> Any:
 
 
 class ExplorenCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Polls charge points and the active session."""
+    """Polls /app/personal/charge-points (which embeds the active session)."""
 
     def __init__(
         self, hass: HomeAssistant, entry: ConfigEntry, api: ExplorenApi
@@ -44,24 +44,43 @@ class ExplorenCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(seconds=IDLE_SCAN_INTERVAL),
         )
         self.entry = entry
         self.api = api
+        # Kept for diagnostics.
+        self.raw: dict[str, Any] = {}
+        # Set by __init__.py after setup; stopped on unload.
+        self.websocket: Any = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             charge_points = await self.api.get_charge_points()
-            active = await self.api.get_active_session()
         except ExplorenAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except ExplorenError as err:
             raise UpdateFailed(str(err)) from err
-        return _normalize(charge_points, active)
+
+        self.raw = {"charge_points": charge_points}
+        data = _normalize(charge_points)
+
+        # Poll faster while any connector has an active session.
+        charging = any(evse.get("session") for evse in data["evses"].values())
+        self.update_interval = timedelta(
+            seconds=ACTIVE_SCAN_INTERVAL if charging else IDLE_SCAN_INTERVAL
+        )
+
+        _LOGGER.debug(
+            "update: evse ids=%s, charging=%s, states=%s",
+            list(data["evses"]),
+            charging,
+            {k: v.get("status") for k, v in data["evses"].items()},
+        )
+        return data
 
 
-def _normalize(charge_points: Any, active: Any) -> dict[str, Any]:
-    """Flatten the responses into {evses: {id: evse}, session, soc}."""
+def _normalize(charge_points: Any) -> dict[str, Any]:
+    """Flatten into {evses: {id: evse}}; each evse keeps its embedded session."""
     if isinstance(charge_points, dict):
         charge_points = charge_points.get("data", charge_points.get("chargePoints", []))
     if not isinstance(charge_points, list):
@@ -76,12 +95,4 @@ def _normalize(charge_points: Any, active: Any) -> dict[str, Any]:
                 continue
             evses[str(evse["id"])] = {**evse, "chargePoint": cp}
 
-    # The active-session payload wraps the session under "session"; when the
-    # response *is* the session it has an id and no nested "session".
-    session = find_key(active, "session") if active else None
-    if session is None and isinstance(active, dict) and active.get("id"):
-        session = active
-
-    soc = find_key(active, "carBatteryPercent")
-
-    return {"evses": evses, "session": session, "soc": soc}
+    return {"evses": evses}

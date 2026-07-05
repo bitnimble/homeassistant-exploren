@@ -38,8 +38,10 @@ class ExplorenStartButton(ExplorenEvseEntity, ButtonEntity):
         self._attr_unique_id = f"{evse_id}_start_charging"
 
     async def async_press(self) -> None:
+        # start uses the EVSE's public identifier, not its internal id.
+        evse_identifier = self.evse.get("identifier") or self._evse_id
         try:
-            await self.coordinator.api.start_session(self._evse_id)
+            await self.coordinator.api.start_session(evse_identifier)
         except ExplorenError as err:
             raise HomeAssistantError(f"Failed to start charging: {err}") from err
         await self.coordinator.async_request_refresh()

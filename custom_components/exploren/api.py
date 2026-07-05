@@ -177,19 +177,33 @@ class ExplorenApi:
     # -- endpoints ----------------------------------------------------------
 
     async def get_charge_points(self) -> Any:
+        # Each EVSE embeds its active `session` (if any), so this is the only
+        # call the coordinator needs.
         return await self._request("GET", "/app/personal/charge-points")
 
-    async def get_active_session(self) -> Any:
-        # Returns 404 (not 200/null) when there is no active session.
-        return await self._request(
-            "GET", "/app/session/active", allow_not_found=True
-        )
+    async def get_settings_global(self) -> Any:
+        # Carries the broadcast config: broadcast.url + broadcast.channelPrefix.
+        return await self._request("GET", "/app/settings/global")
 
-    async def start_session(self, evse_id: int | str) -> Any:
+    async def get_profile(self) -> Any:
+        return await self._request("GET", "/app/profile")
+
+    async def valid_access_token(self) -> str:
+        """A current access token (refreshed if needed) for the websocket."""
+        return await self._valid_token()
+
+    async def start_session(self, evse_identifier: int | str) -> Any:
+        # `evseId` is the EVSE's public identifier (e.g. "3692"), not its
+        # internal id. Sent numeric when it looks numeric, else as-is.
+        value: int | str = (
+            int(evse_identifier)
+            if str(evse_identifier).isdigit()
+            else evse_identifier
+        )
         return await self._request(
             "POST",
             "/app/session/start",
-            json_body={"evseId": int(evse_id), "source": "App"},
+            json_body={"evseId": value, "source": "App"},
         )
 
     async def stop_session(self, session_id: int | str) -> Any:

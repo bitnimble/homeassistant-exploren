@@ -4,3 +4,7 @@ __pycache__/
 *.env
 .exploren_token.json
 .DS_Store
+
+# APK dump kept locally for reverse-engineering, not part of the integration
+*.xapk
+*.apk

@@ -26,11 +26,9 @@ class ExplorenEvseEntity(CoordinatorEntity[ExplorenCoordinator]):
 
     @property
     def session(self) -> dict[str, Any] | None:
-        """The active session, only if it belongs to this EVSE."""
-        session = self.coordinator.data.get("session")
-        if session and str(session.get("evseId")) == self._evse_id:
-            return session
-        return None
+        """The active session for this EVSE, embedded in the charge-points feed."""
+        session = self.evse.get("session")
+        return session if isinstance(session, dict) else None
 
     @property
     def available(self) -> bool:
