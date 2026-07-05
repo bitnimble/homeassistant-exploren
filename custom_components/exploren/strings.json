@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Exploren",
+        "description": "Sign in with your Exploren account.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Exploren",
+        "description": "Re-enter the password for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Failed to connect to Exploren.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "evse_status": { "name": "Status" },
+      "charging_state": { "name": "Charging state" },
+      "session_energy": { "name": "Session energy" },
+      "session_power": { "name": "Session power" },
+      "session_duration": { "name": "Session duration" },
+      "session_cost": { "name": "Session cost" },
+      "vehicle_soc": { "name": "Vehicle battery" }
+    },
+    "binary_sensor": {
+      "charging": { "name": "Charging" },
+      "connected": { "name": "Connected" }
+    },
+    "button": {
+      "start_charging": { "name": "Start charging" },
+      "stop_charging": { "name": "Stop charging" }
+    }
+  }
+}
