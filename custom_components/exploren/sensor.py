@@ -38,6 +38,27 @@ def _energy_kwh(session: dict[str, Any] | None) -> float | None:
     return wh / 1000 if wh is not None else None
 
 
+def _format_duration(seconds: Any) -> str | None:
+    """Human-readable duration, e.g. "1d 4h 20m", "45m", "30s"."""
+    value = _num(seconds)
+    if value is None:
+        return None
+    total = int(value)
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if not parts:
+        parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ExplorenSensorDescription(SensorEntityDescription):
     """Sensor description with a value extractor."""
@@ -84,7 +105,11 @@ SENSORS: tuple[ExplorenSensorDescription, ...] = (
         translation_key="session_duration",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.SECONDS,
-        suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        # Hours by default (readable for multi-hour charging); still switchable
+        # to s/min/d per-entity in the UI. A `formatted` attribute gives the
+        # dynamic "1d 4h 20m" form (HA can't do dynamic units on a numeric state).
+        suggested_unit_of_measurement=UnitOfTime.HOURS,
+        suggested_display_precision=1,
         value_fn=lambda evse, session, soc: _num(session.get("duration")) if session else None,
     ),
     ExplorenSensorDescription(
@@ -151,3 +176,9 @@ class ExplorenSensor(ExplorenEvseEntity, SensorEntity):
             currency = session.get("currency") or {}
             return currency.get("code") or None
         return self.entity_description.native_unit_of_measurement
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key == "session_duration":
+            return {"formatted": _format_duration(self.native_value)}
+        return None
